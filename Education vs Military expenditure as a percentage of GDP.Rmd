@@ -1,0 +1,88 @@
+---
+title: "Education vs Military expenditure as a percentage of GDP"
+author: "Susana Huedo García"
+date: "10 de octubre de 2017"
+output: html_document
+---
+
+```{r, echo=FALSE, warning=FALSE,message=FALSE}
+library(WDI)
+library(cshapes)
+library(tidyverse)
+library(forcats)
+library(scales)
+library(openxlsx)
+library(directlabels)
+library(ggthemes)
+library(RColorBrewer)
+library(countrycode)
+library(maps)
+library(viridis)
+library(leaflet)
+library(rworldmap)
+library(sf)
+library(maptools)
+milit_edu <- WDI(indicator=c('MS.MIL.XPND.GD.ZS','SE.XPD.TOTL.GD.ZS'),country="all", start=1960, end=2017)
+
+milit_edu$countres <- countrycode(milit_edu$iso2c,'iso2c','country.name.es')
+
+milit_edu <- filter(milit_edu,!is.na(MS.MIL.XPND.GD.ZS))%>%
+          filter(!is.na(SE.XPD.TOTL.GD.ZS)) %>%
+          filter(!is.na(countres)) %>%
+          mutate(MS.MIL.XPND.GD.ZS = as.numeric(MS.MIL.XPND.GD.ZS)/100,
+                 SE.XPD.TOTL.GD.ZS = as.numeric(SE.XPD.TOTL.GD.ZS)/100)
+
+world <- map_data("world") %>%
+  mutate(iso2c = countrycode(region, "country.name", destination = "iso2c"))
+
+# data on military/education for just the latest year for each country
+the_data <- milit_edu %>%
+  group_by(country) %>%
+  filter(year == max(year))
+
+shape <- countriesCoarse
+
+# define colour palette
+pal <- colorNumeric(
+  palette = inferno(10),
+  domain = the_data$SE.XPD.TOTL.GD.ZS)
+
+the_data$iso3c <- countrycode(the_data$iso2c,'iso2c','iso3c')
+the_data$iso3c <- as.factor(the_data$iso3c)
+```
+
+## Education expenditure as a percentage of GDP
+
+```{r, echo=FALSE, warning=FALSE,message=FALSE}
+data2 <- shape@data %>%
+  left_join(the_data, by = c("ISO_A3" = "iso3c")) %>%
+  mutate(tooltip = paste0(ADMIN, " ", year, ", ", round(SE.XPD.TOTL.GD.ZS * 100, 1), "%"))
+
+# EPSG4326 means latitude and longitude
+coarse_crs <- leafletCRS(crsClass = "L.CRS.EPSG4326", proj4def = proj4string(countriesCoarse))
+
+shape %>%
+  leaflet(options = leafletOptions(crs = coarse_crs))  %>%
+  addPolygons(stroke = FALSE, smoothFactor = 0.2, fillOpacity = 1, 
+              color = ~pal(data2$SE.XPD.TOTL.GD.ZS),
+              label = data2$tooltip) 
+```
+
+## Military expenditure as a percentage of GDP
+
+```{r, echo=FALSE, warning=FALSE,message=FALSE}
+data2 <- shape@data %>%
+  left_join(the_data, by = c("ISO_A3" = "iso3c")) %>%
+  mutate(tooltip = paste0(ADMIN, " ", year, ", ", round(MS.MIL.XPND.GD.ZS * 100, 1), "%"))
+
+# EPSG4326 means latitude and longitude
+coarse_crs <- leafletCRS(crsClass = "L.CRS.EPSG4326", proj4def = proj4string(countriesCoarse))
+
+shape %>%
+  leaflet(options = leafletOptions(crs = coarse_crs))  %>%
+  addPolygons(stroke = FALSE, smoothFactor = 0.2, fillOpacity = 1, 
+              color = ~pal(data2$MS.MIL.XPND.GD.ZS),
+              label = data2$tooltip) 
+
+
+```
